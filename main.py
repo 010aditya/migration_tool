@@ -15,6 +15,7 @@ from agents.fix_history_logger import FixHistoryLogger
 from agents.circular_dependency_detector import CircularDependencyDetectorAgent
 from agents.swagger_completer_agent import SwaggerCompleterAgent
 from agents.logger_refactor_agent import LoggerRefactorAgent
+from agents.reference_promoter import ReferencePromoterAgent
 from llm.llm_client import get_llm_client
 
 LEGACY_DIR = "legacy_codebase"
@@ -23,7 +24,6 @@ OUTPUT_DIR = "output/fixed_codebase"
 REFERENCE_DIR = "reference_pairs"
 FRAMEWORK_DIR = "enterprise_framework_codebase"
 MAPPING_PATH = "data/mapping.json"
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -36,12 +36,14 @@ def main():
     mapping_agent = MappingLoaderAgent(MAPPING_PATH)
     client = get_llm_client()
 
+    reference_promoter = ReferencePromoterAgent(reference_dirs=os.path.join(REFERENCE_DIR, "migrated"))
     context_stitcher = ContextStitcherAgent(
+        legacy_dir=LEGACY_DIR,
         migrated_dir=MIGRATED_DIR,
-        reference_dir=REFERENCE_DIR,
         framework_dir=FRAMEWORK_DIR,
-        mapping_agent=mapping_agent
+        reference_promoter=reference_promoter
     )
+
     fix_agent = FixAndCompileAgent(client, LEGACY_DIR, MIGRATED_DIR, OUTPUT_DIR)
     validator = BuildValidatorAgent(OUTPUT_DIR)
     fixer = BuildFixerAgent(client, OUTPUT_DIR)
@@ -81,7 +83,5 @@ def main():
 
     print("\n✅ Done. Check logs/ and output/ for results.")
 
-
 if __name__ == "__main__":
-    import fire
-   fire.Fire(main)
+    main()
