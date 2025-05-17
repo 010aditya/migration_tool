@@ -1,10 +1,9 @@
 # agents/reference_promoter.py
 
-import json
 import os
-import numpy as np
+import json
+from sentence_transformers import SentenceTransformer, util
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
 
 INDEX_PATH = "data/embedding_index.json"
 
@@ -12,18 +11,44 @@ class ReferencePromoterAgent:
     def __init__(self, reference_dirs, model_name="all-MiniLM-L6-v2"):
         self.model = SentenceTransformer(model_name)
         self.reference_dirs = reference_dirs
-        self.index = self._load_index()
+        self.embedding_index = self._load_index()  # ✅ Assign the loaded index
 
     def _load_index(self):
         if not os.path.exists(INDEX_PATH):
-            raise FileNotFoundError(f"Embedding index not found: {INDEX_PATH}")
-        with open(INDEX_PATH, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            print(f"ℹ️  Index file not found at {INDEX_PATH}, proceeding without reference.")
+            return {}
+        try:
+            with open(INDEX_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"❌ Failed to load embedding index: {e}")
+            return {}
 
     def get_similar_files(self, input_code, top_k=5):
-        input_embedding = self.model.encode(input_code)
-        index_embeddings = np.array([entry["embedding"] for entry in self.index])
+        if not self.embedding_index:
+            print("⚠️ No embedding index found or it's empty. Skipping similarity check.")
+            return []
 
-        similarities = cosine_similarity([input_embedding], index_embeddings)[0]
-        ranked = sorted(zip(similarities, self.index), key=lambda x: -x[0])
-        return [entry["path"] for _, entry in ranked[:top_k]]
+        input_embedding = self.model.encode(input_code, convert_to_tensor=False)
+
+        index_embeddings = []
+        file_refs = []
+
+        for file_path, data in self.embedding_index.items():
+            embedding = data.get("embedding")
+            if embedding:
+                index_embeddings.append(embedding)
+                file_refs.append(file_path)
+
+        if not index_embeddings:
+            print("⚠️ No valid reference embeddings found in the index. Skipping reference promotion.")
+            return []
+
+        try:
+            similarities = cosine_similarity([input_embedding], index_embeddings)[0]
+        except Exception as e:
+            print(f"❌ Failed to compute cosine similarity: {e}")
+            return []
+
+        scored = sorted(zip(file_refs, similarities), key=lambda x: x[1], reverse=True)
+        return [path for path, score in scored[:top_k]]

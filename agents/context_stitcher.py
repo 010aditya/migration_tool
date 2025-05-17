@@ -1,46 +1,66 @@
 # agents/context_stitcher.py
 
 import os
-from agents.mapping_loader import MappingLoaderAgent
-from agents.reference_promoter import ReferencePromoterAgent
 
 class ContextStitcherAgent:
-    def __init__(self, migrated_dir, reference_dir, framework_dir, mapping_agent):
+    def __init__(self, legacy_dir, migrated_dir, framework_dir=None, reference_promoter=None):
+        self.legacy_dir = legacy_dir
         self.migrated_dir = migrated_dir
-        self.reference_dir = reference_dir
         self.framework_dir = framework_dir
-        self.mapping_agent = mapping_agent
-        self.promoter = ReferencePromoterAgent([reference_dir, framework_dir])
+        self.promoter = reference_promoter
 
-    def stitch_context(self, target_file):
-        stitched_parts = []
+    def stitch_context(self, target_path):
+        parts = []
 
-        # 1. Primary file
-        target_path = os.path.join(self.migrated_dir, target_file)
-        stitched_parts.append(self._read_file("PRIMARY FILE", target_path))
+        # Read migrated code
+        migrated_code = self._read_file(self.migrated_dir, target_path, label="Migrated")
+        if migrated_code:
+            parts.append(migrated_code)
+        else:
+            print(f"⚠️ Skipping {target_path} due to missing migrated content")
 
-        # 2. Related targets from mapping
-        sources = self.mapping_agent.get_sources_by_target(target_file)
-        for src in sources:
-            for related in self.mapping_agent.get_targets_by_source(src):
-                full_path = os.path.join(self.migrated_dir, related)
-                if related != target_file and os.path.exists(full_path):
-                    stitched_parts.append(self._read_file("RELATED FILE", full_path))
+        # Read legacy code
+        legacy_path = self._map_to_legacy_path(target_path)
+        legacy_code = self._read_file(self.legacy_dir, legacy_path, label="Legacy")
+        if legacy_code:
+            parts.insert(0, legacy_code)
 
-        # 3. Similar reference files
-        with open(target_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        similar_refs = self.promoter.get_similar_files(content, top_k=5)
-        for ref_path in similar_refs:
-            if os.path.exists(ref_path):
-                stitched_parts.append(self._read_file("REFERENCE FILE", ref_path))
+        # Optionally add framework context
+        if self.framework_dir:
+            framework_code = self._try_read_framework_file(target_path)
+            if framework_code:
+                parts.append(framework_code)
 
-        return "\n\n".join(stitched_parts)
+        # Add reference files if promoter is present and valid
+        if self.promoter:
+            try:
+                similar_refs = self.promoter.get_similar_files(migrated_code or "")
+                for ref_path in similar_refs:
+                    ref_code = self._read_file("reference_pairs/migrated", ref_path, label="Reference")
+                    if ref_code:
+                        parts.append(ref_code)
+            except Exception as e:
+                print(f"⚠️ Reference promoter failed: {e}")
 
-    def _read_file(self, tag, path):
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                code = f.read()
-            return f"// === {tag}: {os.path.basename(path)} ===\n{code}"
-        except Exception as e:
-            return f"// === {tag} LOAD ERROR: {path} ===\n// {e}"
+        return "\n\n".join(p for p in parts if p)
+
+    def _read_file(self, base_dir, relative_path, label=""):
+        full_path = os.path.join(base_dir, relative_path)
+        if os.path.exists(full_path):
+            try:
+                with open(full_path, "r", encoding="utf-8") as f:
+                    return f"// --- {label} File: {relative_path} ---\n" + f.read()
+            except Exception as e:
+                print(f"❌ Error reading {label} file {relative_path}: {e}")
+                return ""
+        else:
+            print(f"⚠️ {label} file not found: {full_path}")
+            return ""
+
+    def _map_to_legacy_path(self, target_path):
+        # Conservative default: use same filename for legacy mapping
+        return os.path.basename(target_path)
+
+    def _try_read_framework_file(self, target_path):
+        # Optional future support for scanning framework dirs
+        return None
