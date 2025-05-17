@@ -20,7 +20,7 @@ class RetryAgent:
         while attempt < self.max_retries and not success:
             print(f"🔁 Retry attempt {attempt + 1} for {target_path}")
             stitched_context = context_stitcher.stitch_context(target_path)
-            fix_result = fix_agent.fix_file(target_path, stitched_context)
+            fix_result = fix_agent.fix_file(target_path, context_stitcher)
 
             if fix_result.get("success"):
                 success = validator.run_build()
