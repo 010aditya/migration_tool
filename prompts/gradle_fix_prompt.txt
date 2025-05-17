@@ -1,0 +1,22 @@
+# prompts/gradle_fix_prompt.txt
+You are a Gradle build expert.
+Given the current `build.gradle` and the Gradle build errors, update the file to:
+- Add missing dependencies
+- Fix plugin or version issues
+- Ensure the project builds successfully
+
+Only return a valid updated `build.gradle` file — no commentary.
+
+---
+
+[CURRENT BUILD.GRADLE]
+{{gradle}}
+
+---
+
+[BUILD ERRORS]
+{{errors}}
+
+---
+
+[UPDATED BUILD.GRADLE BELOW THIS LINE]

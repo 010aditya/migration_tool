@@ -1,0 +1,24 @@
+# prompts/fix_and_compile_prompt.txt
+You are a Java code fixer working with migrated Spring Boot files.
+Given a broken class, fix it using the stitched context.
+Ensure that:
+- All injected services or repositories are declared properly
+- Required methods exist
+- Class references are valid
+- Annotations are correct (e.g., @Service, @Autowired, @Transactional)
+- All necessary imports are included
+- The final output compiles successfully
+
+---
+
+[BROKEN FILE]
+{{broken_code}}
+
+---
+
+[REFERENCE CONTEXT]
+{{references}}
+
+---
+
+[FIXED FILE BELOW THIS LINE]

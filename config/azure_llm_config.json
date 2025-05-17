@@ -1,0 +1,7 @@
+{
+    "api_key": "<YOUR_AZURE_OPENAI_API_KEY>",
+    "endpoint": "https://<YOUR_RESOURCE_NAME>.openai.azure.com/",
+    "api_version": "2023-07-01-preview",
+    "deployment_name": "gpt-4o"
+  }
+  

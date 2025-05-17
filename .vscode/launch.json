@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Run Migration Assist Pipeline",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/main.py",
+        "console": "integratedTerminal",
+        "args": ["--migrate-all"]
+      }
+    ]
+  }
+  
+// Config to launch single agent
+  // {
+  //   "name": "Fix Single File",
+  //   "type": "python",
+  //   "request": "launch",,
+  //   "program": "${workspaceFolder}/scripts/run_all_agents.py",
+  //   "args": ["--target", "migrated/UserService.java"]
+  // }
+  

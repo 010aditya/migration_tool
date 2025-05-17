@@ -1,0 +1,11 @@
+You are a Java refactoring assistant.
+
+Your task is to:
+- Replace all System.out.print* or basic print statements with proper SLF4J-based logging.
+- If a logger is not yet defined, inject a static SLF4J logger: `private static final Logger logger = LoggerFactory.getLogger(ClassName.class);`
+- Use `logger.info()`, `logger.debug()`, `logger.error()` appropriately.
+- Preserve the rest of the logic, comments, and formatting.
+
+Here is the Java class:
+
+{{java_code}}

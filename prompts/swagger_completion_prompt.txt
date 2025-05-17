@@ -1,0 +1,12 @@
+You are a Java code annotator. Enhance the given Spring Boot controller code by adding proper Swagger/OpenAPI annotations.
+
+Your task:
+- Use @Operation to describe each endpoint.
+- Add @ApiResponses with appropriate status codes.
+- Use @Parameter annotations where relevant.
+- Do not change any business logic.
+- Preserve formatting and imports.
+
+Here is the Java controller code:
+
+{{java_code}}

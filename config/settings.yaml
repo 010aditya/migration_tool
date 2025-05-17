@@ -1,0 +1,17 @@
+{}
+# config/settings.yaml
+
+llm:
+  provider: openai  # or 'azure'
+  model: gpt-4o
+  temperature: 0.3
+  max_retries: 3
+
+paths:
+  legacy_dir: legacy_codebase
+  migrated_dir: migrated_codebase
+  output_dir: output/fixed_codebase
+  reference_dir: reference_pairs
+  framework_dir: enterprise_framework_codebase
+  mapping_path: data/mapping.json
+  build_log_path: logs/build_logs/latest_build.log

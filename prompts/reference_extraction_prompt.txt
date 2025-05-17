@@ -1,0 +1,29 @@
+# prompts/reference_extraction_prompt.txt
+
+You are a migration analyst. Given a legacy Java class and its migrated counterpart, extract reusable logic and summarize what parts of the legacy class have been transformed.
+
+Provide:
+- Method name mappings (legacy → migrated)
+- Service or repository injections added
+- Key behavioral differences
+- Unmigrated logic that should be preserved
+
+Use the summary to help generate code in the current class that may be incomplete.
+
+Only output mappings and summaries — no filler commentary.
+
+---
+
+[LEGACY CLASS]
+
+{{legacy_code}}
+
+---
+
+[MIGRATED CLASS]
+
+{{migrated_code}}
+
+---
+
+[SUGGESTED INSIGHTS BELOW THIS LINE]
