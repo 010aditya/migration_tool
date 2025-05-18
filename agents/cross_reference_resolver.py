@@ -26,11 +26,9 @@ class CrossReferenceResolverAgent:
         relationship = self._load_relationship(target_file_path)
         class_map = relationship.get("classMap", {}) if relationship else {}
 
-        # Step 1: Fix package declaration
-        correct_package = self._infer_package_from_path(target_file_path)
-        code = self._fix_package_declaration(code, correct_package)
+        correct_package = self._infer_package_from_path(full_path)
+        code = self._force_fix_package_declaration(code, correct_package)
 
-        # Step 2: Extract undefined types
         undefined_types = self._extract_undefined_types(code)
         resolved_imports = self._resolve_imports(undefined_types, class_map)
         code = self._apply_imports(code, resolved_imports)
@@ -55,30 +53,36 @@ class CrossReferenceResolverAgent:
                 print(f"❌ Error loading relationship for {target_path}: {e}")
         return None
 
-    def _infer_package_from_path(self, relative_path):
-        java_src_index = relative_path.find("src/main/java/")
-        if java_src_index != -1:
-            package_path = relative_path[java_src_index + len("src/main/java/" ):]
+    def _infer_package_from_path(self, full_path):
+        src_index = full_path.find("src/main/java/")
+        if src_index != -1:
+            package_path = full_path[src_index + len("src/main/java/"):]
             package_dir = os.path.dirname(package_path)
             return package_dir.replace("/", ".").replace("\\", ".")
         return None
 
-    def _fix_package_declaration(self, code, correct_package):
+    def _force_fix_package_declaration(self, code, correct_package):
         if not correct_package:
             return code
         updated = False
         lines = code.splitlines()
+        found_package = False
+
         for i, line in enumerate(lines):
             if line.strip().startswith("package "):
-                if correct_package not in line:
+                found_package = True
+                declared = line.strip().replace("package", "").replace(";", "").strip()
+                if declared != correct_package:
                     lines[i] = f"package {correct_package};"
                     updated = True
+                    print(f"🔧 Package declaration corrected: '{declared}' → '{correct_package}'")
                 break
-        else:
+
+        if not found_package:
             lines.insert(0, f"package {correct_package};")
             updated = True
-        if updated:
-            print(f"✅ Package declaration fixed: {correct_package}")
+            print(f"🔧 Package declaration inserted: '{correct_package}'")
+
         return "\n".join(lines)
 
     def _extract_undefined_types(self, code):
