@@ -3,11 +3,12 @@
 import os
 
 class ContextStitcherAgent:
-    def __init__(self, legacy_dir, migrated_dir, framework_dir=None, reference_promoter=None):
+    def __init__(self, legacy_dir, migrated_dir, framework_dir=None, reference_promoter=None, mapping_agent=None):
         self.legacy_dir = legacy_dir
         self.migrated_dir = migrated_dir
         self.framework_dir = framework_dir
         self.promoter = reference_promoter
+        self.mapping_agent = mapping_agent
 
     def stitch_context(self, target_path):
         parts = []
@@ -24,6 +25,15 @@ class ContextStitcherAgent:
         legacy_code = self._read_file(self.legacy_dir, legacy_path, label="Legacy")
         if legacy_code:
             parts.insert(0, legacy_code)
+
+        # Append related migrated files (co-migrated from same source)
+        if self.mapping_agent:
+            related_targets = self.mapping_agent.get_related_targets(target_path)
+            for related_file in related_targets:
+                if related_file != target_path:
+                    related_code = self._read_file(self.migrated_dir, related_file, label="Related Target")
+                    if related_code:
+                        parts.append(related_code)
 
         # Optionally add framework context
         if self.framework_dir:
@@ -58,7 +68,9 @@ class ContextStitcherAgent:
             return ""
 
     def _map_to_legacy_path(self, target_path):
-        # Conservative default: use same filename for legacy mapping
+        # Lookup legacy path from mapping_agent
+        if self.mapping_agent:
+            return self.mapping_agent.get_source_for_target(target_path) or os.path.basename(target_path)
         return os.path.basename(target_path)
 
     def _try_read_framework_file(self, target_path):
