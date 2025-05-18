@@ -1,6 +1,7 @@
 # agents/context_stitcher.py
 
 import os
+import json
 
 class ContextStitcherAgent:
     def __init__(self, legacy_dir, migrated_dir, framework_dir=None, reference_promoter=None, mapping_agent=None):
@@ -9,31 +10,34 @@ class ContextStitcherAgent:
         self.framework_dir = framework_dir
         self.promoter = reference_promoter
         self.mapping_agent = mapping_agent
+        self.relationship_dir = os.path.join(migrated_dir, "../relationships")
 
     def stitch_context(self, target_path):
         parts = []
 
-        # Read migrated code
+        # Load relationship file if available
+        relationship = self._load_relationship(target_path)
+
+        # Add legacy code
+        legacy_paths = relationship.get("legacySources", []) if relationship else [self._map_to_legacy_path(target_path)]
+        for legacy_path in legacy_paths:
+            legacy_code = self._read_file(self.legacy_dir, legacy_path, label="Legacy")
+            if legacy_code:
+                parts.append(legacy_code)
+
+        # Add target file
         migrated_code = self._read_file(self.migrated_dir, target_path, label="Migrated")
         if migrated_code:
             parts.append(migrated_code)
         else:
             print(f"⚠️ Skipping {target_path} due to missing migrated content")
 
-        # Read legacy code
-        legacy_path = self._map_to_legacy_path(target_path)
-        legacy_code = self._read_file(self.legacy_dir, legacy_path, label="Legacy")
-        if legacy_code:
-            parts.insert(0, legacy_code)
-
-        # Append related migrated files (co-migrated from same source)
-        if self.mapping_agent:
-            related_targets = self.mapping_agent.get_related_targets(target_path)
-            for related_file in related_targets:
-                if related_file != target_path:
-                    related_code = self._read_file(self.migrated_dir, related_file, label="Related Target")
-                    if related_code:
-                        parts.append(related_code)
+        # Add related co-migrated files
+        if relationship:
+            for related in relationship.get("relatedMigratedTargets", []):
+                related_code = self._read_file(self.migrated_dir, related, label="Related Target")
+                if related_code:
+                    parts.append(related_code)
 
         # Optionally add framework context
         if self.framework_dir:
@@ -68,11 +72,20 @@ class ContextStitcherAgent:
             return ""
 
     def _map_to_legacy_path(self, target_path):
-        # Lookup legacy path from mapping_agent
         if self.mapping_agent:
             return self.mapping_agent.get_source_for_target(target_path) or os.path.basename(target_path)
         return os.path.basename(target_path)
 
     def _try_read_framework_file(self, target_path):
-        # Optional future support for scanning framework dirs
+        return None
+
+    def _load_relationship(self, target_path):
+        filename = os.path.basename(target_path).replace(".java", "") + "_relationship.json"
+        rel_path = os.path.join(self.relationship_dir, filename)
+        if os.path.exists(rel_path):
+            try:
+                with open(rel_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"❌ Error loading relationship for {target_path}: {e}")
         return None
