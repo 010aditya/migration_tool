@@ -1,125 +1,90 @@
-# agents/cross_reference_resolver.py
-
 import os
-import re
-import json
 import javalang
+import difflib
+from utils.accurate_class_indexer import AccurateClassIndexer
 
 class CrossReferenceResolverAgent:
-    def __init__(self, output_dir):
-        self.output_dir = output_dir
-        self.relationship_dir = os.path.join(output_dir, "relationships")
+    def __init__(self, migrated_dir, class_index):
+        self.migrated_dir = migrated_dir
+        self.class_index = class_index  # AccurateClassIndexer instance
 
-    def resolve_and_patch(self, target_file_path):
-        full_path = os.path.join(self.output_dir, target_file_path)
-        if not os.path.exists(full_path):
-            print(f"❌ File not found for cross-reference resolution: {full_path}")
-            return False
+    def resolve(self, target_path):
+        file_path = os.path.join(self.migrated_dir, target_path)
+        if not os.path.exists(file_path):
+            print(f"❌ File not found: {file_path}")
+            return
 
-        try:
-            with open(full_path, "r", encoding="utf-8") as f:
-                code = f.read()
-        except Exception as e:
-            print(f"❌ Failed to read file {full_path}: {e}")
-            return False
+        with open(file_path, 'r', encoding='utf-8') as f:
+            code = f.read()
 
-        relationship = self._load_relationship(target_file_path)
-        class_map = relationship.get("classMap", {}) if relationship else {}
-
-        correct_package = self._infer_package_from_path(full_path)
-        code = self._force_fix_package_declaration(code, correct_package)
-
-        undefined_types = self._extract_undefined_types(code)
-        resolved_imports = self._resolve_imports(undefined_types, class_map)
-        code = self._apply_imports(code, resolved_imports)
-
-        try:
-            with open(full_path, "w", encoding="utf-8") as f:
-                f.write(code)
-            print(f"✅ Cross-reference resolved: {target_file_path}")
-            return True
-        except Exception as e:
-            print(f"❌ Failed to write patched file {full_path}: {e}")
-            return False
-
-    def _load_relationship(self, target_path):
-        filename = os.path.basename(target_path).replace(".java", "") + "_relationship.json"
-        rel_path = os.path.join(self.relationship_dir, filename)
-        if os.path.exists(rel_path):
-            try:
-                with open(rel_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"❌ Error loading relationship for {target_path}: {e}")
-        return None
-
-    def _infer_package_from_path(self, full_path):
-        src_index = full_path.find("src/main/java/")
-        if src_index != -1:
-            package_path = full_path[src_index + len("src/main/java/"):]
-            package_dir = os.path.dirname(package_path)
-            return package_dir.replace("/", ".").replace("\\", ".")
-        return None
-
-    def _force_fix_package_declaration(self, code, correct_package):
-        if not correct_package:
-            return code
-        updated = False
-        lines = code.splitlines()
-        found_package = False
-
-        for i, line in enumerate(lines):
-            if line.strip().startswith("package "):
-                found_package = True
-                declared = line.strip().replace("package", "").replace(";", "").strip()
-                if declared != correct_package:
-                    lines[i] = f"package {correct_package};"
-                    updated = True
-                    print(f"🔧 Package declaration corrected: '{declared}' → '{correct_package}'")
-                break
-
-        if not found_package:
-            lines.insert(0, f"package {correct_package};")
-            updated = True
-            print(f"🔧 Package declaration inserted: '{correct_package}'")
-
-        return "\n".join(lines)
-
-    def _extract_undefined_types(self, code):
         try:
             tree = javalang.parse.parse(code)
-        except:
-            return []
-        defined_imports = set()
-        if hasattr(tree, 'imports'):
-            for imp in tree.imports:
-                defined_imports.add(imp.path.split(".")[-1])
-        defined_types = set()
-        for path, node in tree:
-            if isinstance(node, javalang.tree.ClassDeclaration):
-                defined_types.add(node.name)
-        used_types = set(match.group(1) for match in re.finditer(r'\b([A-Z][a-zA-Z0-9_]*)\b', code))
-        common_java_types = {'String', 'Integer', 'Long', 'List', 'Map', 'Boolean', 'Double'}
-        undefined = used_types - defined_imports - defined_types - common_java_types
-        return list(undefined)
+        except Exception as e:
+            print(f"❌ Failed to parse {target_path}: {e}")
+            return
 
-    def _resolve_imports(self, type_names, class_map):
-        resolved_imports = []
-        for name in type_names:
-            if name in class_map:
-                resolved_imports.append(class_map[name])
-        return resolved_imports
+        # Extract imports and types used
+        imports = [imp.path for imp in tree.imports]
+        type_refs = self._extract_type_references(tree)
+        defined_types = [t.name for t in tree.types if hasattr(t, 'name')]
 
-    def _apply_imports(self, code, import_fqns):
+        undefined_types = [t for t in type_refs if t not in imports and t not in defined_types and not self._is_java_builtin(t)]
+        corrections = {}
+
+        for t in undefined_types:
+            best_match = difflib.get_close_matches(t, self.class_index.index.keys(), n=1, cutoff=0.7)
+            if best_match:
+                match = best_match[0]
+                full_path = self.class_index.resolve(match)
+                if full_path:
+                    package = full_path.replace("/", ".").rsplit(".java", 1)[0]
+                    corrections[t] = (match, f"import {package};")
+
+        updated_code = self._apply_fixes(code, corrections)
+
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(updated_code)
+
+        print(f"✅ Cross-reference resolved for {target_path}: {list(corrections.keys())}")
+
+    def _extract_type_references(self, tree):
+        refs = set()
+        for path, node in tree.filter(javalang.tree.ReferenceType):
+            if isinstance(node.name, str):
+                refs.add(node.name)
+        return refs
+
+    def _is_java_builtin(self, name):
+        java_builtins = {'String', 'List', 'Map', 'Integer', 'Boolean', 'Object'}
+        return name in java_builtins
+
+    def _apply_fixes(self, code, corrections):
         lines = code.splitlines()
-        import_lines = [f"import {fqcn};" for fqcn in sorted(set(import_fqns))]
-        insert_index = 0
-        for i, line in enumerate(lines):
-            if line.strip().startswith("package "):
-                insert_index = i + 1
-                break
-        while insert_index < len(lines) and lines[insert_index].strip().startswith("import "):
-            insert_index += 1
-        lines = [line for line in lines if not line.strip().startswith("import ")]
-        lines[insert_index:insert_index] = import_lines
-        return "\n".join(lines)
+        new_lines = []
+        inserted_imports = set()
+
+        for line in lines:
+            new_line = line
+            for original, (replacement, _) in corrections.items():
+                if original in new_line:
+                    new_line = new_line.replace(original, replacement)
+            new_lines.append(new_line)
+
+        # Preserve existing imports
+        existing_imports = [line for line in lines if line.strip().startswith("import ")]
+
+        # Add new imports
+        for _, (_, import_stmt) in corrections.items():
+            if import_stmt not in existing_imports:
+                inserted_imports.add(import_stmt)
+
+        # Insert imports after package
+        final_lines = []
+        package_inserted = False
+        for line in new_lines:
+            final_lines.append(line)
+            if not package_inserted and line.strip().startswith("package"):
+                final_lines.extend(sorted(inserted_imports))
+                package_inserted = True
+
+        return "\n".join(final_lines)
